@@ -44,6 +44,8 @@ interface KnowledgeDocumentsTabProps {
   onOpenRecallTest: (id: string) => void;
   onReindexDocument: (id: string) => void;
   onUpdateStatus: (id: string, status: KnowledgeDocumentStatus) => void;
+  onDeleteDocument: (document: KnowledgeDocumentSummary) => void;
+  deletingDocumentId?: string;
 }
 
 export default function KnowledgeDocumentsTab({
@@ -67,6 +69,8 @@ export default function KnowledgeDocumentsTab({
   onOpenRecallTest,
   onReindexDocument,
   onUpdateStatus,
+  onDeleteDocument,
+  deletingDocumentId,
 }: KnowledgeDocumentsTabProps) {
   const [dragOver, setDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -196,14 +200,25 @@ export default function KnowledgeDocumentsTab({
             查看资料
           </Button>
           {document.status === "archived" ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => onUpdateStatus(document.id, "enabled")}
-            >
-              恢复启用
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => onUpdateStatus(document.id, "enabled")}
+              >
+                恢复启用
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                disabled={deletingDocumentId === document.id}
+                onClick={() => onDeleteDocument(document)}
+              >
+                {deletingDocumentId === document.id ? "删除中…" : "删除"}
+              </Button>
+            </>
           ) : (
             <>
               <OpenInCreativeHubButton
@@ -245,6 +260,15 @@ export default function KnowledgeDocumentsTab({
               ) : null}
               <Button size="sm" variant="ghost" className="rounded-full text-muted-foreground hover:text-destructive" onClick={() => confirmArchiveDocument(document)}>
                 归档
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                disabled={deletingDocumentId === document.id}
+                onClick={() => onDeleteDocument(document)}
+              >
+                {deletingDocumentId === document.id ? "删除中…" : "删除"}
               </Button>
             </div>
           </details>
@@ -420,7 +444,7 @@ export default function KnowledgeDocumentsTab({
                     <p className="text-sm font-medium">
                       {dragOver ? "松开鼠标上传" : "拖拽文件到此处，或点击选择"}
                     </p>
-                    <p className="text-xs text-muted-foreground">仅支持 .txt 文本文件</p>
+                    <p className="text-xs text-muted-foreground">仅支持 .txt 文本文件，不限制文件大小</p>
                   </div>
                 </>
               )}

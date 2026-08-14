@@ -10,6 +10,7 @@ import {
   clearFinishedRagJobs,
   createKnowledgeDocument,
   createKnowledgeDocumentVersion,
+  deleteKnowledgeDocument,
   deleteRagJob,
   getKnowledgeDocument,
   getRagHealth,
@@ -28,6 +29,7 @@ import KnowledgeDocumentsTab from "./components/KnowledgeDocumentsTab";
 import KnowledgeEmbeddingSettingsCard, { type KnowledgeEmbeddingSettingsFormState } from "./components/KnowledgeEmbeddingSettingsCard";
 import KnowledgeLibraryOverview from "./components/KnowledgeLibraryOverview";
 import KnowledgeOpsTab from "./components/KnowledgeOpsTab";
+import { buildKnowledgeDocumentDeleteConfirmMessage } from "./components/knowledgeRagUi";
 
 const TAB_VALUES = new Set(["documents", "ops", "settings"]);
 
@@ -260,6 +262,18 @@ export default function KnowledgePage() {
       if (selectedDocumentId) {
         await queryClient.invalidateQueries({ queryKey: queryKeys.knowledge.detail(selectedDocumentId) });
       }
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (id: string) => deleteKnowledgeDocument(id),
+    onSuccess: async (_response, documentId) => {
+      if (selectedDocumentId === documentId) {
+        setSelectedDocumentId("");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["knowledge", "documents"] });
+      await queryClient.invalidateQueries({ queryKey: ragJobsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: ["book-analysis"] });
     },
   });
 
@@ -501,6 +515,18 @@ export default function KnowledgePage() {
     deleteRagJobMutation.mutate(jobId);
   };
 
+  const handleDeleteDocument = (document: {
+    id: string;
+    title: string;
+    status: KnowledgeDocumentStatus;
+    bookAnalysisCount?: number;
+  }) => {
+    if (!window.confirm(buildKnowledgeDocumentDeleteConfirmMessage(document))) {
+      return;
+    }
+    deleteDocumentMutation.mutate(document.id);
+  };
+
   return (
     <div className="space-y-5">
       <KnowledgeLibraryOverview
@@ -564,6 +590,8 @@ export default function KnowledgePage() {
             }}
             onReindexDocument={(id) => reindexMutation.mutate(id)}
             onUpdateStatus={(id, nextStatus) => updateStatusMutation.mutate({ id, status: nextStatus })}
+            onDeleteDocument={handleDeleteDocument}
+            deletingDocumentId={deleteDocumentMutation.isPending ? deleteDocumentMutation.variables : undefined}
           />
         </TabsContent>
 
@@ -624,6 +652,8 @@ export default function KnowledgePage() {
           status: "enabled",
         })}
         restorePending={updateStatusMutation.isPending}
+        onDeleteDocument={() => selectedDocument && handleDeleteDocument(selectedDocument)}
+        deletePending={deleteDocumentMutation.isPending}
         onActivateVersion={(versionId) =>
           activateVersionMutation.mutate({
             documentId: selectedDocumentId,

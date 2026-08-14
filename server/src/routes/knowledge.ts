@@ -258,4 +258,18 @@ router.patch(
   },
 );
 
+router.delete("/documents/:id", validate({ params: documentParamsSchema }), async (req, res, next) => {
+  try {
+    const { id } = req.params as z.infer<typeof documentParamsSchema>;
+    const data = await knowledgeService.deleteDocument(id);
+    res.status(200).json({
+      success: true,
+      data,
+      message: "资料已删除。",
+    } satisfies ApiResponse<typeof data>);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

@@ -10,10 +10,10 @@ export interface DesktopReleaseNotes {
 export const CURRENT_DESKTOP_RELEASE_NOTES: DesktopReleaseNotes = {
   version: APP_VERSION,
   title: "本次更新介绍",
-  summary: "这次更新让创作工作台更容易保持清晰、稳定和贴合个人使用习惯。",
+  summary: "这次更新让知识库资料更好导入和清理，角色立绘也可以看清细节。",
   items: [
-    "创作中枢聚焦状态查询、问题诊断、执行记录和正式入口导航。",
-    "新增浅色、深色、跟随系统以及墨砚、暖纸、夜航主题风格。",
-    "首页和小说预览会跟随主题切换，视觉资源库支持按图片比例展示的瀑布流。",
+    "知识库导入 txt 资料时不再限制文件大小。",
+    "知识库资料可以彻底删除，暂时不用仍可先归档。",
+    "角色库立绘支持放大查看，并可缩放核对细节。",
   ],
 };

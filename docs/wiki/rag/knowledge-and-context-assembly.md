@@ -16,7 +16,9 @@
 
 - `知识库` 是向量化资料的独立管理入口，负责文档、版本、索引任务、健康状态和 Embedding/RAG 配置。
 - 上传资料应形成 `KnowledgeDocument` 和版本概念；在线检索只针对当前激活版本。
+- 知识库文档上传和追加版本把完整 txt 放进 JSON 请求体。这两类请求不走全局 `API_JSON_LIMIT`（默认 20mb），应用层不设文件大小上限。其他 JSON API 仍使用全局上限。超大文件仍受 Node 内存和数据库文本字段容量约束，这不是产品层配额。
 - 归档知识文档是可恢复状态，不删除 `KnowledgeDocumentVersion` 原文；归档会移出默认检索、资料选择和拆书入口，并在 RAG 已启用时排队清理已有分块。
+- 删除知识文档是不可恢复操作。删除会先断开 `activeVersionId`，再删除以该文档为原文来源的拆书任务，然后删除文档本身；版本、章节缓存和小说/世界绑定随文档级联删除。以该文档为续写来源的小说会把 `sourceKnowledgeDocumentId` 置空；把它当作拆书发布结果的任务会把 `publishedDocumentId` 置空，但不会删除来源拆书。RAG 启用时排队 `delete` 索引任务清理向量；RAG 关闭时直接删除本地 `KnowledgeChunk`。
 - 文档上传、版本切换、归档恢复和手动重建，只有 RAG 已启用时才能标记为 `queued` 并创建索引任务；RAG 关闭时统一保留 `idle`，不得制造没有消费者的永久排队状态。启用 RAG 后可由用户发起重建索引。
 - 小说或世界观存在绑定知识文档时，相关生成链路优先使用绑定文档。
 - 用户显式传入 `knowledgeDocumentIds` 时，只检索这些文档。
@@ -43,7 +45,7 @@
 
 知识库面向作者时应表达为“可复用的创作资料书架”，而不是要求用户持续操作的索引控制台。首屏优先帮助用户识别资料内容、当前可用性以及如何继续用于创作；健康状态正常时使用轻量摘要，不重复展示操作建议。
 
-索引进度、失败原因和需要用户处理的异常必须就近可见。召回测试、重建索引、启停、归档等维护能力应完整保留，但在正常状态下按需展开；Embedding、RAG 配置和任务诊断继续放在独立页签，不能压过资料浏览与创作入口。
+索引进度、失败原因和需要用户处理的异常必须就近可见。召回测试、重建索引、启停、归档、删除等维护能力应完整保留，但在正常状态下按需展开；Embedding、RAG 配置和任务诊断继续放在独立页签，不能压过资料浏览与创作入口。
 
 ## 示例
 
@@ -61,12 +63,14 @@
 
 ## 失败模式
 
+- 知识库上传大 txt 被 413 拦截：先确认请求是否打到 `/api/knowledge/documents` 的上传或追加版本路径，以及该路径是否在全局 JSON parser 之前挂了独立 parser。不要把全局 `API_JSON_LIMIT` 重新套回知识库上传。
 - 检索结果不符合当前小说：检查是否有显式文档筛选或小说/世界绑定覆盖了全局默认。
 - 世界观分层生成混入无关小说文档：检查调用方是否只需要 `world` / `world_library_item`，以及 RAG 服务是否错误忽略了显式 `ownerTypes` 范围。
 - Prompt 输入过大：检查 Context Broker 的预算、摘要和 dropped block 记录。
 - 知识库健康正常但生成没引用资料：检查 resolver 是否接入当前 workflow、prompt 是否声明 context requirement。
 - 旧版本内容仍被检索：检查激活版本和 chunk rebuild 是否对齐。
 - 归档文档恢复后无法召回：检查恢复动作是否把索引状态置为 `queued`，以及对应重建任务是否成功完成。
+- 删除资料后拆书或检索仍能看到旧内容：检查是否只做了归档；硬删除必须走 `KnowledgeService.deleteDocument`。若 RAG 仍能召回，检查 `delete` 索引任务是否成功清掉 `KnowledgeChunk` 和 Qdrant points。若拆书还在，检查被删文档是不是发布结果而不是拆书原文来源。
 - facet 检索完全无结果：先检查发布时的 `preChunks` 是否进入 RAG job payload，再检查 `KnowledgeChunk.facetKeys` 和 Qdrant payload 是否都写入同一 facet 字段；如果是历史 chunk 没有 facet，应确认检索服务触发无 facet 回退。
 - 拆书发布后结构化结论召回不准：检查 `bookAnalysis.publish.facets` 的字段映射是否把结构化字段映射到正确 facet，不要在消费方临时发明新的 facet 名。
 - 召回质量难以复盘：检查 `RAG_RETRIEVAL_TRACE_SAMPLE_RATE` 是否为 0、`RagRetrievalTrace` 是否有近期记录、`timingsJson` 是否包含 vector / keyword / fusion / reranker / decay / total 六项，以及 facet 命中为空时 `fallbackTriggered` 是否写为 true。

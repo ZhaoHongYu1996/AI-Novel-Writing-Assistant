@@ -2,10 +2,10 @@ import { useState, type ReactNode } from "react";
 import type { ImageAsset } from "@ai-novel/shared/types/image";
 import { resolveImageAssetUrl } from "@/api/images";
 import type { BaseCharacter } from "@ai-novel/shared/types/novel";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, ZoomIn } from "lucide-react";
+import { ImageLightbox } from "@/components/image/ImageLightbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AppDialogContent, Dialog } from "@/components/ui/dialog";
 
 interface CharacterCardProps {
   character: BaseCharacter;
@@ -103,7 +103,7 @@ export function CharacterCard({
       <div className="space-y-3 px-4 py-4">
         <div>
           <div className="text-sm font-semibold text-foreground">角色形象</div>
-          <div className="mt-1 text-xs text-muted-foreground">保存主形象后，可在后续视觉生成中保持角色识别度。</div>
+          <div className="mt-1 text-xs text-muted-foreground">保存主形象后，可在后续视觉生成中保持角色识别度。点击图片可放大查看。</div>
         </div>
         {assetsLoading ? <div className="text-xs text-muted-foreground">加载中...</div> : null}
         {!assetsLoading && assets.length === 0 ? (
@@ -115,16 +115,21 @@ export function CharacterCard({
               <div key={asset.id} className="w-full max-w-[300px] space-y-2 rounded-md border border-border/80 p-2">
                 <button
                   type="button"
-                  className="block aspect-square w-full overflow-hidden rounded-md bg-muted"
+                  className="group relative block aspect-square w-full overflow-hidden rounded-md bg-muted"
                   onClick={() => setPreviewAsset(asset)}
-                  title="点击预览"
+                  aria-label={`放大查看${character.name}的形象`}
                 >
                   <img
                     src={resolveImageAssetUrl(asset.url)}
                     alt={`${character.name}-形象图`}
-                    className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.02]"
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                     loading="lazy"
                   />
+                  <span className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/25" />
+                  <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-background/90 px-2 py-1 text-[11px] text-foreground shadow-sm">
+                    <ZoomIn className="h-3.5 w-3.5" aria-hidden="true" />
+                    放大查看
+                  </span>
                 </button>
                 <details className="text-[11px] leading-4 text-muted-foreground">
                   <summary className="cursor-pointer select-none">文件详情</summary>
@@ -158,58 +163,40 @@ export function CharacterCard({
         ) : null}
       </div>
 
-      <Dialog
+      <ImageLightbox
         open={Boolean(previewAsset)}
         onOpenChange={(open) => {
           if (!open) {
             setPreviewAsset(null);
           }
         }}
-      >
-        <AppDialogContent
-          className="max-w-[1000px]"
-          title={previewAsset ? `${character.name} - 图片预览` : "图片预览"}
-          bodyClassName="space-y-3"
-          footer={previewAsset ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={previewAsset.isPrimary || settingPrimary || deletingAssetId === previewAsset.id}
-                onClick={() => onSetPrimary(previewAsset.id)}
-              >
-                设为主图
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={deletingAssetId === previewAsset.id}
-                onClick={() => void handleDeleteAsset(previewAsset)}
-              >
-                {deletingAssetId === previewAsset.id ? "删除中..." : "删除图片"}
-              </Button>
-            </>
-          ) : null}
-          footerClassName="gap-2"
-        >
-          {previewAsset ? (
-            <>
-              <div className="flex max-h-[70vh] items-center justify-center overflow-auto rounded-md bg-muted/30 p-2">
-                <img
-                  src={resolveImageAssetUrl(previewAsset.url)}
-                  alt={`${character.name}-预览图`}
-                  className="max-h-[66vh] w-auto max-w-full rounded-md object-contain"
-                />
-              </div>
-              {previewAsset.localPath ? (
-                <div className="text-xs text-muted-foreground break-all">
-                  本地路径：{previewAsset.localPath}
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </AppDialogContent>
-      </Dialog>
+        src={previewAsset ? resolveImageAssetUrl(previewAsset.url) : undefined}
+        alt={`${character.name}-形象图`}
+        title={`${character.name}的形象`}
+        caption={previewAsset ? (previewAsset.isPrimary ? "当前主图" : "候选图") : undefined}
+        actions={previewAsset ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={previewAsset.isPrimary || settingPrimary || deletingAssetId === previewAsset.id}
+              onClick={() => onSetPrimary(previewAsset.id)}
+            >
+              设为主图
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={deletingAssetId === previewAsset.id}
+              onClick={() => void handleDeleteAsset(previewAsset)}
+            >
+              {deletingAssetId === previewAsset.id ? "删除中..." : "删除图片"}
+            </Button>
+          </>
+        ) : null}
+      />
     </article>
   );
 }

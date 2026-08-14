@@ -62,6 +62,8 @@ interface KnowledgeDocumentDetailDialogProps {
   recallResult: KnowledgeRecallTestResult | null;
   onRestoreDocument: () => void;
   restorePending: boolean;
+  onDeleteDocument: () => void;
+  deletePending: boolean;
   onActivateVersion: (versionId: string) => void;
   activateVersionPending: boolean;
 }
@@ -82,6 +84,8 @@ export default function KnowledgeDocumentDetailDialog({
   recallResult,
   onRestoreDocument,
   restorePending,
+  onDeleteDocument,
+  deletePending,
   onActivateVersion,
   activateVersionPending,
 }: KnowledgeDocumentDetailDialogProps) {
@@ -118,6 +122,16 @@ export default function KnowledgeDocumentDetailDialog({
             {selectedDocumentId && !isArchived ? (
               <Button variant="outline" onClick={onReindex}>
                 手动重建索引
+              </Button>
+            ) : null}
+            {selectedDocumentId ? (
+              <Button
+                variant="outline"
+                className="text-muted-foreground hover:text-destructive"
+                disabled={deletePending}
+                onClick={onDeleteDocument}
+              >
+                {deletePending ? "删除中…" : "删除资料"}
               </Button>
             ) : null}
           </div>

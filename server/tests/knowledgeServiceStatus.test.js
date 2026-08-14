@@ -185,3 +185,116 @@ test("completed knowledge delete job leaves archived document index status idle"
     prisma.knowledgeDocument.updateMany = originalUpdateMany;
   }
 });
+
+test("deleting a knowledge document queues index cleanup and removes source book analyses", async () => {
+  const service = new KnowledgeService();
+  const originalEnabled = ragConfig.enabled;
+  const originalFindUnique = prisma.knowledgeDocument.findUnique;
+  const originalTransaction = prisma.$transaction;
+  const originalDeleteManyChunks = prisma.knowledgeChunk.deleteMany;
+  const originalEnqueueOwnerJob = ragServices.ragIndexService.enqueueOwnerJob;
+  const enqueueCalls = [];
+  const transactionCalls = [];
+  let chunkDeleteArgs = null;
+
+  ragConfig.enabled = true;
+  prisma.knowledgeDocument.findUnique = async () => ({ id: "knowledge-doc-1" });
+  prisma.$transaction = async (callback) => {
+    const tx = {
+      knowledgeDocument: {
+        update: async (args) => {
+          transactionCalls.push(["update", args]);
+          return args;
+        },
+        delete: async (args) => {
+          transactionCalls.push(["delete", args]);
+          return args;
+        },
+      },
+      bookAnalysis: {
+        deleteMany: async (args) => {
+          transactionCalls.push(["deleteAnalyses", args]);
+          return { count: 1 };
+        },
+      },
+    };
+    return callback(tx);
+  };
+  prisma.knowledgeChunk.deleteMany = async (args) => {
+    chunkDeleteArgs = args;
+    return { count: 0 };
+  };
+  ragServices.ragIndexService.enqueueOwnerJob = async (...args) => {
+    enqueueCalls.push(args);
+    return { id: "rag-job-delete" };
+  };
+
+  try {
+    const result = await service.deleteDocument("knowledge-doc-1");
+
+    assert.deepEqual(result, { id: "knowledge-doc-1" });
+    assert.deepEqual(enqueueCalls, [
+      ["delete", "knowledge_document", "knowledge-doc-1"],
+    ]);
+    assert.equal(chunkDeleteArgs, null);
+    assert.deepEqual(transactionCalls, [
+      ["update", { where: { id: "knowledge-doc-1" }, data: { activeVersionId: null } }],
+      ["deleteAnalyses", { where: { documentId: "knowledge-doc-1" } }],
+      ["delete", { where: { id: "knowledge-doc-1" } }],
+    ]);
+  } finally {
+    ragConfig.enabled = originalEnabled;
+    prisma.knowledgeDocument.findUnique = originalFindUnique;
+    prisma.$transaction = originalTransaction;
+    prisma.knowledgeChunk.deleteMany = originalDeleteManyChunks;
+    ragServices.ragIndexService.enqueueOwnerJob = originalEnqueueOwnerJob;
+  }
+});
+
+test("deleting a knowledge document while RAG is disabled still removes local chunks", async () => {
+  const service = new KnowledgeService();
+  const originalEnabled = ragConfig.enabled;
+  const originalFindUnique = prisma.knowledgeDocument.findUnique;
+  const originalTransaction = prisma.$transaction;
+  const originalDeleteManyChunks = prisma.knowledgeChunk.deleteMany;
+  const originalEnqueueOwnerJob = ragServices.ragIndexService.enqueueOwnerJob;
+  let enqueueCount = 0;
+  let chunkDeleteArgs = null;
+
+  ragConfig.enabled = false;
+  prisma.knowledgeDocument.findUnique = async () => ({ id: "knowledge-doc-1" });
+  prisma.$transaction = async (callback) => callback({
+    knowledgeDocument: {
+      update: async () => ({}),
+      delete: async () => ({}),
+    },
+    bookAnalysis: {
+      deleteMany: async () => ({ count: 0 }),
+    },
+  });
+  prisma.knowledgeChunk.deleteMany = async (args) => {
+    chunkDeleteArgs = args;
+    return { count: 2 };
+  };
+  ragServices.ragIndexService.enqueueOwnerJob = async () => {
+    enqueueCount += 1;
+  };
+
+  try {
+    await service.deleteDocument("knowledge-doc-1");
+
+    assert.equal(enqueueCount, 0);
+    assert.deepEqual(chunkDeleteArgs, {
+      where: {
+        ownerType: "knowledge_document",
+        ownerId: "knowledge-doc-1",
+      },
+    });
+  } finally {
+    ragConfig.enabled = originalEnabled;
+    prisma.knowledgeDocument.findUnique = originalFindUnique;
+    prisma.$transaction = originalTransaction;
+    prisma.knowledgeChunk.deleteMany = originalDeleteManyChunks;
+    ragServices.ragIndexService.enqueueOwnerJob = originalEnqueueOwnerJob;
+  }
+});

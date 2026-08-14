@@ -164,12 +164,21 @@ export async function updateKnowledgeDocumentChapter(
   return data;
 }
 
+const knowledgeDocumentUploadRequest = {
+  maxBodyLength: Infinity,
+  maxContentLength: Infinity,
+} as const;
+
 export async function createKnowledgeDocument(payload: {
   title?: string;
   fileName: string;
   content: string;
 }) {
-  const { data } = await apiClient.post<ApiResponse<KnowledgeDocumentDetail>>("/knowledge/documents", payload);
+  const { data } = await apiClient.post<ApiResponse<KnowledgeDocumentDetail>>(
+    "/knowledge/documents",
+    payload,
+    knowledgeDocumentUploadRequest,
+  );
   return data;
 }
 
@@ -180,6 +189,7 @@ export async function createKnowledgeDocumentVersion(id: string, payload: {
   const { data } = await apiClient.post<ApiResponse<KnowledgeDocumentDetail>>(
     `/knowledge/documents/${id}/versions`,
     payload,
+    knowledgeDocumentUploadRequest,
   );
   return data;
 }
@@ -199,6 +209,11 @@ export async function reindexKnowledgeDocument(id: string) {
 
 export async function updateKnowledgeDocumentStatus(id: string, status: KnowledgeDocumentStatus) {
   const { data } = await apiClient.patch<ApiResponse<KnowledgeDocument>>(`/knowledge/documents/${id}`, { status });
+  return data;
+}
+
+export async function deleteKnowledgeDocument(id: string) {
+  const { data } = await apiClient.delete<ApiResponse<{ id: string }>>(`/knowledge/documents/${id}`);
   return data;
 }
 

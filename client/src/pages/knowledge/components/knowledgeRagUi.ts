@@ -1,5 +1,20 @@
 import type { RagJobSummary } from "@/api/knowledge";
 
+export function buildKnowledgeDocumentDeleteConfirmMessage(document: {
+  title: string;
+  status?: string;
+  bookAnalysisCount?: number;
+}): string {
+  const lines = [`确认删除“${document.title}”吗？删除后原文、版本和检索索引都会去掉，无法恢复。`];
+  if ((document.bookAnalysisCount ?? 0) > 0) {
+    lines.push(`这份资料还关联了 ${document.bookAnalysisCount} 个拆书项目，删除后这些拆书结果也会一起去掉。`);
+  }
+  if (document.status !== "archived") {
+    lines.push("如果只是暂时不用，可以先归档，之后还能恢复。");
+  }
+  return lines.join("\n");
+}
+
 export function formatStatus(status: string): string {
   switch (status) {
     case "enabled":

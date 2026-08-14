@@ -86,6 +86,7 @@ export function createApp() {
   getSharedNovelServices();
   const app = express();
   const jsonBodyLimit = process.env.API_JSON_LIMIT ?? "20mb";
+  const knowledgeDocumentJsonParser = express.json({ limit: Number.POSITIVE_INFINITY });
   const corsOriginEnv = process.env.CORS_ORIGIN;
   const corsAllowList = corsOriginEnv
     ? corsOriginEnv
@@ -121,6 +122,9 @@ export function createApp() {
     const errorSuffix = errorMessage ? ` | error: ${errorMessage}` : "";
     return `${method} ${url} ${status} ${responseTime} ms - ${contentLength}${errorSuffix}`;
   }));
+  // Knowledge document upload/version bodies carry the full txt payload.
+  // Keep the global JSON cap for other APIs, but do not apply it here.
+  app.use("/api/knowledge/documents", knowledgeDocumentJsonParser);
   app.use(express.json({ limit: jsonBodyLimit }));
 
   app.use("/api/health", healthRouter);

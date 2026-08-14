@@ -39,6 +39,7 @@ const storyModeProfileFields = readClientFile("src/pages/storyModes/components/S
 const storyModeTreeBrowser = readClientFile("src/pages/storyModes/components/StoryModeTreeBrowser.tsx");
 const assetTreeNavigator = readClientFile("src/components/assetLibrary/AssetTreeNavigator.tsx");
 const characterPage = readClientFile("src/pages/characters/CharacterLibrary.tsx");
+const characterCard = readClientFile("src/pages/characters/components/CharacterCard.tsx");
 const writingFormulaLanding = readClientFile("src/pages/writingFormula/components/WritingFormulaLanding.tsx");
 const writingFormulaWorkbench = readClientFile("src/pages/writingFormula/components/WritingFormulaWorkbenchPanel.tsx");
 const writingFormulaCreateDialog = readClientFile("src/pages/writingFormula/components/WritingFormulaCreateDialog.tsx");
@@ -78,6 +79,8 @@ test("phase one asset pages expose purpose status recommendation and recovery st
   assert.match(genrePage, /genreTreeQuery\.isError/);
   assert.match(characterPage, /characterListQuery\.isLoading/);
   assert.match(characterPage, /characterListQuery\.isError/);
+  assert.match(characterCard, /ImageLightbox/);
+  assert.match(characterCard, /放大查看/);
 });
 
 test("knowledge library presents a document shelf before maintenance controls", () => {
@@ -91,6 +94,7 @@ test("knowledge library presents a document shelf before maintenance controls", 
   assert.match(knowledgeDocuments, /onOpenRecallTest/);
   assert.match(knowledgeDocuments, /onReindexDocument/);
   assert.match(knowledgeDocuments, /confirmArchiveDocument/);
+  assert.match(knowledgeDocuments, /onDeleteDocument/);
 });
 
 test("knowledge maintenance keeps recovery obvious and technical detail secondary", () => {

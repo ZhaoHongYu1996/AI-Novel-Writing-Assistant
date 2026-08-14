@@ -5,6 +5,7 @@ import type {
   KnowledgeRecallTestResult,
 } from "@ai-novel/shared/types/knowledge";
 import { prisma } from "../../db/prisma";
+import { AppError } from "../../middleware/errorHandler";
 import { ragConfig } from "../../config/rag";
 import { ragServices } from "../rag";
 import {
@@ -446,6 +447,42 @@ export class KnowledgeService {
       this.queueKnowledgeRebuild(documentId);
     }
     return updated;
+  }
+
+  async deleteDocument(documentId: string) {
+    const document = await prisma.knowledgeDocument.findUnique({
+      where: { id: documentId },
+      select: { id: true },
+    });
+    if (!document) {
+      throw new AppError("找不到这份资料。", 404);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.knowledgeDocument.update({
+        where: { id: documentId },
+        data: { activeVersionId: null },
+      });
+      await tx.bookAnalysis.deleteMany({
+        where: { documentId },
+      });
+      await tx.knowledgeDocument.delete({
+        where: { id: documentId },
+      });
+    });
+
+    this.queueKnowledgeDelete(documentId);
+
+    if (!ragConfig.enabled) {
+      await prisma.knowledgeChunk.deleteMany({
+        where: {
+          ownerType: "knowledge_document",
+          ownerId: documentId,
+        },
+      });
+    }
+
+    return { id: documentId };
   }
 
   async testDocumentRecall(documentId: string, query: string, limit = 6): Promise<KnowledgeRecallTestResult> {
