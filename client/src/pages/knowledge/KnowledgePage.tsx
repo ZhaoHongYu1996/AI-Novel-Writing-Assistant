@@ -56,6 +56,8 @@ export default function KnowledgePage() {
   const [ragForm, setRagForm] = useState<KnowledgeEmbeddingSettingsFormState>({
     embeddingProvider: "openai",
     embeddingModel: "text-embedding-3-small",
+    embeddingApiKey: "",
+    embeddingBaseURL: "",
     collectionVersion: 1,
     collectionMode: "auto",
     collectionName: "ai_novel_chunks_v1",
@@ -143,6 +145,8 @@ export default function KnowledgePage() {
     setRagForm({
       embeddingProvider: data.embeddingProvider,
       embeddingModel: data.embeddingModel,
+      embeddingApiKey: "",
+      embeddingBaseURL: "",
       collectionVersion: data.collectionVersion,
       collectionMode: data.collectionMode,
       collectionName: data.collectionName,
@@ -206,6 +210,8 @@ export default function KnowledgePage() {
           ...prev,
           embeddingProvider: data.embeddingProvider,
           embeddingModel: data.embeddingModel,
+          embeddingApiKey: "",
+          embeddingBaseURL: "",
           collectionVersion: data.collectionVersion,
           collectionMode: data.collectionMode,
           collectionName: data.collectionName,
@@ -462,6 +468,8 @@ export default function KnowledgePage() {
     saveRagMutation.mutate({
       embeddingProvider: ragForm.embeddingProvider,
       embeddingModel: ragForm.embeddingModel.trim(),
+      embeddingApiKey: ragForm.embeddingApiKey.trim() || undefined,
+      embeddingBaseURL: ragForm.embeddingBaseURL.trim() || undefined,
       collectionMode: ragForm.collectionMode,
       collectionName: ragForm.collectionName.trim(),
       collectionTag: ragForm.collectionTag.trim(),

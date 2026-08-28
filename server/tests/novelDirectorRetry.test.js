@@ -651,6 +651,7 @@ test("continueTask resumes auto execution in the background instead of blocking 
   try {
     await service.continueTask("task_auto_execution_resume", {
       continuationMode: "auto_execute_range",
+      forceResume: true,
     });
     assert.equal(runningCalls.length, 1);
     assert.equal(runningCalls[0].taskId, "task_auto_execution_resume");
@@ -667,6 +668,7 @@ test("continueTask resumes auto execution in the background instead of blocking 
     assert.equal(runtimeCalls[0].novelId, "novel_auto_execution_resume");
     assert.equal(runtimeCalls[0].resumeCheckpointType, "chapter_batch_ready");
     assert.equal(runtimeCalls[0].allowSkipReviewBlockedChapter, true);
+    assert.equal(runtimeCalls[0].resumePendingManualRecovery, true);
   } finally {
     service.continueCandidateStageTask = originalContinueCandidateStageTask;
     service.workflowService.getTaskById = originalGetTaskById;
@@ -997,18 +999,19 @@ test("continueTask does not skip the current chapter when approving a waiting au
   }
 });
 
-test("continueTask normalizes a generic resume into skip_quality_repair at a replan checkpoint", async () => {
+test("continueTask replans the affected window before continuing from a replan checkpoint", async () => {
   const service = new NovelDirectorService();
   const originalContinueCandidateStageTask = service.continueCandidateStageTask;
   const originalGetTaskById = service.workflowService.getTaskById;
   const originalResolveAssetFirstRecovery = service.resolveAssetFirstRecovery;
-  const originalResolveDirectorRiskPolicy = service.resolveDirectorRiskPolicy;
   const originalMarkTaskRunning = service.workflowService.markTaskRunning;
   const originalScheduleBackgroundRun = service.scheduleBackgroundRun;
   const originalRunFromReady = service.autoExecutionRuntime.runFromReady;
+  const originalReplanNovel = service.novelService.replanNovel;
   const runningCalls = [];
   const scheduledRuns = [];
   const runtimeCalls = [];
+  const replanCalls = [];
   const restoreDirectorRunNode = stubDirectorRuntimeNode(service);
 
   service.continueCandidateStageTask = async () => false;
@@ -1016,7 +1019,6 @@ test("continueTask normalizes a generic resume into skip_quality_repair at a rep
     type: "auto_execution",
     resumeCheckpointType: "replan_required",
   });
-  service.resolveDirectorRiskPolicy = async () => null;
   service.workflowService.getTaskById = async () => ({
     id: "task_quality_repair_skip_normalized",
     lane: "auto_director",
@@ -1070,10 +1072,14 @@ test("continueTask normalizes a generic resume into skip_quality_repair at a rep
   service.autoExecutionRuntime.runFromReady = async (input) => {
     runtimeCalls.push(input);
   };
+  service.novelService.replanNovel = async (novelId, input) => {
+    replanCalls.push({ novelId, ...input });
+    return { affectedChapterIds: ["chapter_5", "chapter_6", "chapter_7"] };
+  };
 
   try {
     await service.continueTask("task_quality_repair_skip_normalized", {
-      continuationMode: "resume",
+      continuationMode: "auto_execute_range",
     });
     assert.equal(runningCalls.length, 1);
     assert.equal(runningCalls[0].stage, "quality_repair");
@@ -1081,19 +1087,95 @@ test("continueTask normalizes a generic resume into skip_quality_repair at a rep
 
     await scheduledRuns[0].runner();
 
+    assert.equal(replanCalls.length, 1);
+    assert.equal(replanCalls[0].novelId, "novel_quality_repair_skip_normalized");
+    assert.equal(replanCalls[0].chapterId, "chapter_6");
+    assert.equal(replanCalls[0].windowSize, 3);
+    assert.equal(replanCalls[0].triggerType, "director_replan_recovery");
     assert.equal(runtimeCalls.length, 1);
     assert.equal(runtimeCalls[0].resumeCheckpointType, "replan_required");
     assert.equal(runtimeCalls[0].skipCurrentQualityRepair, true);
     assert.equal(runtimeCalls[0].approveAutoExecutionScope, true);
+    assert.equal(runningCalls[0].clearCheckpoint, false);
   } finally {
     service.continueCandidateStageTask = originalContinueCandidateStageTask;
     service.workflowService.getTaskById = originalGetTaskById;
     service.resolveAssetFirstRecovery = originalResolveAssetFirstRecovery;
-    service.resolveDirectorRiskPolicy = originalResolveDirectorRiskPolicy;
     service.workflowService.markTaskRunning = originalMarkTaskRunning;
     service.scheduleBackgroundRun = originalScheduleBackgroundRun;
     service.autoExecutionRuntime.runFromReady = originalRunFromReady;
+    service.novelService.replanNovel = originalReplanNovel;
     restoreDirectorRunNode();
+  }
+});
+
+test("continueTask keeps the replan checkpoint when window replanning fails", async () => {
+  const service = new NovelDirectorService();
+  const originalContinueCandidateStageTask = service.continueCandidateStageTask;
+  const originalGetTaskById = service.workflowService.getTaskById;
+  const originalResolveAssetFirstRecovery = service.resolveAssetFirstRecovery;
+  const originalMarkTaskRunning = service.workflowService.markTaskRunning;
+  const originalScheduleBackgroundRun = service.scheduleBackgroundRun;
+  const originalRunFromReady = service.autoExecutionRuntime.runFromReady;
+  const originalReplanNovel = service.novelService.replanNovel;
+  const scheduledRuns = [];
+  const runtimeCalls = [];
+
+  service.continueCandidateStageTask = async () => false;
+  service.resolveAssetFirstRecovery = async () => ({
+    type: "auto_execution",
+    resumeCheckpointType: "replan_required",
+  });
+  service.workflowService.getTaskById = async () => ({
+    id: "task_replan_failure",
+    lane: "auto_director",
+    status: "failed",
+    pendingManualRecovery: false,
+    novelId: "novel_replan_failure",
+    checkpointType: "replan_required",
+    currentStage: "质量修复",
+    currentItemKey: "quality_repair",
+    resumeTargetJson: JSON.stringify({ stage: "pipeline", chapterId: "chapter_14" }),
+    lastError: "相邻章节计划需要调整。",
+    seedPayloadJson: JSON.stringify({
+      directorInput: buildDirectorInput({ workflowTaskId: "task_replan_failure", runMode: "auto_to_execution" }),
+      autoExecution: {
+        enabled: true,
+        mode: "chapter_range",
+        startOrder: 14,
+        endOrder: 20,
+        nextChapterId: "chapter_14",
+        nextChapterOrder: 14,
+        remainingChapterIds: ["chapter_14"],
+        remainingChapterOrders: [14],
+        remainingChapterCount: 1,
+        pipelineJobId: "pipeline_failed",
+        pipelineStatus: "succeeded",
+      },
+    }),
+  });
+  service.workflowService.markTaskRunning = async (_taskId, input) => {
+    assert.equal(input.clearCheckpoint, false);
+    return null;
+  };
+  service.scheduleBackgroundRun = (_taskId, runner) => scheduledRuns.push(runner);
+  service.novelService.replanNovel = async () => {
+    throw new Error("重规划模型调用失败");
+  };
+  service.autoExecutionRuntime.runFromReady = async (input) => runtimeCalls.push(input);
+
+  try {
+    await service.continueTask("task_replan_failure", { continuationMode: "auto_execute_range" });
+    await assert.rejects(scheduledRuns[0](), /重规划模型调用失败/);
+    assert.equal(runtimeCalls.length, 0);
+  } finally {
+    service.continueCandidateStageTask = originalContinueCandidateStageTask;
+    service.workflowService.getTaskById = originalGetTaskById;
+    service.resolveAssetFirstRecovery = originalResolveAssetFirstRecovery;
+    service.workflowService.markTaskRunning = originalMarkTaskRunning;
+    service.scheduleBackgroundRun = originalScheduleBackgroundRun;
+    service.autoExecutionRuntime.runFromReady = originalRunFromReady;
+    service.novelService.replanNovel = originalReplanNovel;
   }
 });
 

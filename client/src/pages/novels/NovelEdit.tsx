@@ -6,7 +6,7 @@ import type { DirectorContinuationMode, DirectorLockScope, DirectorSessionState,
 import { extractDirectorTaskSeedPayloadFromMeta } from "@ai-novel/shared/types/novelDirector";
 import type { AutoDirectorAction, AutoDirectorMutationActionCode } from "@ai-novel/shared/types/autoDirectorFollowUp";
 import type { DirectorBookAutomationAction, DirectorDashboardMode, DirectorTaskSnapshot } from "@ai-novel/shared/types/directorRuntime";
-import type { NovelExportDownloadFormat, NovelExportScope } from "@ai-novel/shared/types/novelExport";
+import type { NovelExportDownloadFormat, NovelExportFormat, NovelExportScope } from "@ai-novel/shared/types/novelExport";
 import type {
   Chapter,
   PipelineRepairMode,
@@ -91,7 +91,7 @@ import { canCancelDirectorTask, getCandidateSelectionLink } from "@/lib/novelWor
 import { syncAutoDirectorTaskCache } from "@/lib/taskQueryCache";
 import {
   buildContinueAutoExecutionActionLabel,
-  buildSkipQualityRepairActionLabel,
+  buildReplanAndContinueActionLabel,
   buildTakeoverDescription,
   buildTakeoverTitle,
   formatTakeoverCheckpoint,
@@ -527,7 +527,7 @@ export default function NovelEdit() {
   });
   const exportNovelMutation = useMutation({
     mutationFn: async (input: {
-      format: NovelExportDownloadFormat;
+      format: NovelExportFormat;
       scope: NovelExportScope;
       novelTitle: string;
     }) => {
@@ -616,6 +616,7 @@ export default function NovelEdit() {
     isGeneratingChapterDetailBundle,
     generatingChapterDetailMode,
     generatingChapterDetailChapterId,
+    chapterDetailFailure,
     startStrategyGeneration,
     startStrategyCritique,
     startSkeletonGeneration,
@@ -623,6 +624,7 @@ export default function NovelEdit() {
     startChapterListGeneration,
     startChapterDetailGeneration,
     startChapterDetailBundleGeneration,
+    retryFailedChapterDetail,
     handleVolumeFieldChange,
     handleOpenPayoffsChange,
     handleAddVolume,
@@ -1594,12 +1596,12 @@ export default function NovelEdit() {
         onClick: () => openChapterExecution(task),
         variant: "default",
       });
-    } else if (mode === "action_required" && task.checkpointType === "replan_required") {
+    } else if ((mode === "action_required" || mode === "failed") && task.checkpointType === "replan_required") {
       actions.push({
-        label: buildSkipQualityRepairActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
+        label: buildReplanAndContinueActionLabel(continueAutoExecutionMutation.isPending),
         onClick: () => continueAutoExecutionMutation.mutate({
           directorTaskId: task.id,
-          continuationMode: "skip_quality_repair",
+          continuationMode: "auto_execute_range",
         }),
         variant: "default",
         disabled: continueAutoExecutionMutation.isPending,
@@ -1691,9 +1693,10 @@ export default function NovelEdit() {
       || task.status === "cancelled"
     ) {
       actions.push({
-        label: "收起此提醒",
-        onClick: dismissTakeover,
+        label: archiveCompletedAutoDirectorMutation.isPending ? "移除中..." : "从任务列表移除",
+        onClick: () => archiveCompletedAutoDirectorMutation.mutate(task.id),
         variant: "secondary",
+        disabled: archiveCompletedAutoDirectorMutation.isPending,
       });
     } else if (canArchiveCompletedAutoDirectorTask(task)) {
       actions.push({
@@ -1838,6 +1841,24 @@ export default function NovelEdit() {
           variant: "outline",
         });
       }
+    } else if (
+      task.checkpointType === "replan_required"
+      && (task.status === "waiting_approval" || task.status === "failed" || task.status === "cancelled")
+    ) {
+      actions.push({
+        label: buildReplanAndContinueActionLabel(continueAutoExecutionMutation.isPending),
+        onClick: () => continueAutoExecutionMutation.mutate({
+          directorTaskId: task.id,
+          continuationMode: "auto_execute_range",
+        }),
+        variant: "default",
+        disabled: continueAutoExecutionMutation.isPending,
+      });
+      actions.push({
+        label: "打开质量修复",
+        onClick: () => openQualityRepair(task),
+        variant: "outline",
+      });
     } else if (task.pendingManualRecovery) {
       actions.push({
         label: continueAutoDirectorMutation.isPending ? "继续中..." : "继续自动导演",
@@ -1866,22 +1887,6 @@ export default function NovelEdit() {
         label: "去确认书级方向",
         onClick: () => openCandidateSelection(task.id),
         variant: "default",
-      });
-    } else if (task.status === "waiting_approval" && task.checkpointType === "replan_required") {
-      const autoExecutionScopeLabel = resolveAutoExecutionScopeLabel(task);
-      actions.push({
-        label: buildSkipQualityRepairActionLabel(autoExecutionScopeLabel, continueAutoExecutionMutation.isPending),
-        onClick: () => continueAutoExecutionMutation.mutate({
-          directorTaskId: task.id,
-          continuationMode: "skip_quality_repair",
-        }),
-        variant: "default",
-        disabled: continueAutoExecutionMutation.isPending,
-      });
-      actions.push({
-        label: "打开质量修复",
-        onClick: () => openQualityRepair(task),
-        variant: "outline",
       });
     } else if (
       task.status === "waiting_approval"
@@ -2538,8 +2543,10 @@ export default function NovelEdit() {
     isGeneratingChapterDetailBundle,
     generatingChapterDetailMode,
     generatingChapterDetailChapterId,
+    chapterDetailFailure,
     onGenerateChapterDetail: startChapterDetailGeneration,
     onGenerateChapterDetailBundle: startChapterDetailBundleGeneration,
+    onRetryFailedChapterDetail: retryFailedChapterDetail,
     syncPreview: volumeSyncPreview,
     syncOptions: volumeSyncOptions,
     onSyncOptionsChange: (patch) => setVolumeSyncOptions((prev) => ({ ...prev, ...patch })),
@@ -2745,6 +2752,9 @@ export default function NovelEdit() {
   const isExportingFullJson = exportNovelMutation.isPending
     && exportVariables?.scope === "full"
     && exportVariables?.format === "json";
+  const isExportingFullTxt = exportNovelMutation.isPending
+    && exportVariables?.scope === "full"
+    && exportVariables?.format === "txt";
 
   if (displayAutoDirectorTask?.checkpointType === "production_experience_required") {
     return (
@@ -2768,6 +2778,7 @@ export default function NovelEdit() {
         isExportingCurrentJson,
         isExportingFullMarkdown,
         isExportingFullJson,
+        isExportingFullTxt,
         onExportCurrent: (format) => {
           if (!currentExportScope) {
             return;
