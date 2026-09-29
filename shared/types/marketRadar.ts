@@ -12,6 +12,45 @@ export type MarketInfluenceMode = typeof MARKET_INFLUENCE_MODES[number];
 export type MarketScanStatus = "queued" | "running" | "ready" | "analyzing" | "succeeded" | "partial" | "failed" | "interrupted";
 export type MarketTrendDirection = "current" | "rising" | "stable" | "falling";
 
+export const MARKET_RADAR_ANALYSIS_STARTABLE_STATUSES = ["ready", "partial", "interrupted", "succeeded"] as const satisfies readonly MarketScanStatus[];
+
+export function canStartMarketRadarAnalysis(status: MarketScanStatus): boolean {
+  return MARKET_RADAR_ANALYSIS_STARTABLE_STATUSES.some((candidate) => candidate === status);
+}
+
+export function resolveMarketRadarAnalysisAvailability(input: {
+  hasReport: boolean;
+  scanning: boolean;
+  analyzing: boolean;
+  selectedItemCount: number;
+}): {
+  selectionDisabled: boolean;
+  startDisabled: boolean;
+  canViewReport: boolean;
+} {
+  const selectionDisabled = input.scanning || input.analyzing;
+  return {
+    selectionDisabled,
+    startDisabled: selectionDisabled || input.selectedItemCount === 0,
+    canViewReport: input.hasReport,
+  };
+}
+
+export function resolveMarketRadarPollingRunId(
+  activeRunId: string,
+  latestRun?: { id: string; status: MarketScanStatus } | null,
+): string {
+  if (activeRunId) return activeRunId;
+  return latestRun?.status === "analyzing" ? latestRun.id : "";
+}
+
+export function shouldResetMarketRadarSignalSelection(
+  selectedReportId: string,
+  availableReportId?: string | null,
+): boolean {
+  return Boolean(availableReportId && selectedReportId !== availableReportId);
+}
+
 export interface MarketRadarListSource {
   platform: MarketRadarPlatform;
   platformLabel: string;
@@ -44,7 +83,6 @@ export interface MarketRadarSignal {
   direction: MarketTrendDirection;
   heat: number;
   crowding: number;
-  evidenceItemIds: string[];
   recommended: boolean;
 }
 
@@ -55,9 +93,6 @@ export interface MarketPlatformStatus {
   capturedAt?: string | null;
   error?: string | null;
 }
-
-export const MARKET_FOUNDATION_SYNC_TARGETS = ["genre", "story_modes"] as const;
-export type MarketFoundationSyncTarget = typeof MARKET_FOUNDATION_SYNC_TARGETS[number];
 
 export interface MarketFoundationCandidate {
   existingId: string | null;
@@ -87,10 +122,27 @@ export interface MarketTrendReport {
   analyzedLists?: MarketRadarAnalysisListSelection[];
   analyzedItemIds?: string[];
   platformStatuses: MarketPlatformStatus[];
-  evidenceItems: MarketRankingItem[];
   productionFoundationCandidate?: MarketProductionFoundationCandidate | null;
   productionFoundationSync?: MarketProductionFoundationSyncState | null;
   createdAt: string;
+}
+
+export interface MarketSavedTopic {
+  id: string;
+  reportId: string;
+  signalId: string;
+  kind: MarketRadarSignal["kind"];
+  label: string;
+  summary: string;
+  direction: MarketTrendDirection;
+  heat: number;
+  crowding: number;
+  createdAt: string;
+}
+
+export interface SaveMarketTopicRequest {
+  reportId: string;
+  signalId: string;
 }
 
 export interface MarketScanRun {
@@ -107,6 +159,13 @@ export interface MarketScanRun {
   finishedAt?: string | null;
 }
 
+export interface MarketCreativeSeed {
+  openingIdea: string;
+  coreAdvantage: string;
+  bookSellingPoint: string;
+  first30ChapterPromise: string;
+}
+
 export interface MarketCreativeBrief {
   id: string;
   reportId: string;
@@ -114,6 +173,7 @@ export interface MarketCreativeBrief {
   selectedSignals: MarketRadarSignal[];
   summary: string;
   promptBlock: string;
+  creativeSeed?: MarketCreativeSeed | null;
   productionFoundation?: NovelCreateResourceRecommendation | null;
   createdAt: string;
 }
@@ -136,8 +196,4 @@ export interface CreateMarketCreativeBriefRequest {
   reportId: string;
   signalIds: string[];
   influenceMode: MarketInfluenceMode;
-}
-
-export interface SyncMarketProductionFoundationRequest {
-  target: MarketFoundationSyncTarget;
 }

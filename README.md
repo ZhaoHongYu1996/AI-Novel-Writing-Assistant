@@ -1,5 +1,9 @@
-# AI 小说创作工作台 / AI Novel Production Engine
-一个面向长篇小说创作的 AI Native 开源项目。
+# AI 小说创作工作台 / Biz Novel Studio
+一个帮助新手从灵感走到完整长篇的 AI Native 开源小说创作工作台；英文名由 **AI Novel Production Engine** 更新为 **Biz Novel Studio**。
+
+Open-source AI novel writing assistant and long-form production studio.
+
+> 中文名仍为 **AI 小说创作工作台**；`AI Novel Writing Assistant` 仓库地址和既有下载入口保持不变。
 
 当前开发主线：
 `Creative Hub + 自动导演开书 + 本书世界上下文 + 整本生产主链 + 写法引擎`
@@ -13,10 +17,13 @@
 ![Database](https://img.shields.io/badge/Database-SQLite%20%2B%20Prisma-111827)
 ![Vector DB](https://img.shields.io/badge/RAG-Qdrant-E63946)
 
+<a href="https://trendshift.io/repositories/26664?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-26664" target="_blank" rel="noopener noreferrer">
+  <img src="https://trendshift.io/api/badge/repositories/26664" alt="ExplosiveCoderflome/AI-Novel-Writing-Assistant | Trendshift" width="250" height="55" />
+</a>
 
 ## ✨ 项目简介
 
-这是一个**面向长篇小说完成度的 AI 生产系统**，不是普通的"你写一句、AI 补一句"聊天壳子。
+**AI 小说创作工作台 / Biz Novel Studio** 是一个**面向长篇小说完成度的 AI 生产系统**。
 
 它的核心做法是：
 
@@ -115,7 +122,7 @@
 
 - GitHub Pages **公开介绍站**（端口 4173）展示主链、产品截图、文档入口与下载链接
 - 文档站提供本地全文搜索、面包屑、文内目录、上 / 下一篇导航、tip / warn / checkpoint 提示块、GFM 表格
-- 33 篇公开文档：项目介绍、安装与准备、常见问题、故障排查、第一本小说实操路径、按阶段恢复手册、端到端生产链、自动导演阶段全景、章节执行链、知识与 RAG 召回链 + 模块说明
+- 34 篇公开文档：项目介绍、安装与准备、常见问题、故障排查、第一本小说实操路径、热门题材雷达、按阶段恢复手册、端到端生产链、自动导演阶段全景、章节执行链、知识与 RAG 召回链 + 模块说明
 - 模块文档配套真实产品截图；自动导演阶段名用中文表达，技术别名对照表保留在自动导演阶段全景文末供开发者查阅
 
 ### 9. 模型路由与本地运行
@@ -145,15 +152,23 @@
 - 角色、世界观、写法、知识库和质量控制一起托住单章生成，让每一章都尽量还在同一本书里。
 - 每写完一章，系统都会把新状态回灌回去，继续影响后续章节、卷级节奏和必要时的重规划。
 
+## 自动导演交互架构图
+
+[![自动导演：从想法到完整小说](./docs/architecture/diagram.webp)](https://explosivecoderflome.github.io/AI-Novel-Writing-Assistant/architecture/auto-director-idea-to-novel.detailed.workflow.html)
+
+- [打开交互架构图](https://explosivecoderflome.github.io/AI-Novel-Writing-Assistant/architecture/auto-director-idea-to-novel.detailed.workflow.html)，查看从想法、全书规划、写法与反 AI 契约到逐章生产和写后同步的完整链路。
+- 图表使用 [Archify](https://github.com/tt-a1i/archify) 生成；仓库内保留[图表源数据](./docs/architecture/auto-director-idea-to-novel.detailed.workflow.json)与[自包含 HTML](./docs/architecture/auto-director-idea-to-novel.detailed.workflow.html)。
+
 ## 最新更新
 
-### 2026-08-26
+### 2026-09-23
 
-- 热门题材雷达会区分库中已有与需要加入的题材和推进方式：已有内容可直接定位，缺少的方向确认后才写入资源库；从雷达开书时会预填这些创作基础，同时保留用户的手动选择。
-- 人工章节审校需要调整后续规划时，会保留正文并等待用户确认，不会在审校过程中静默重规划。
-- 审校结论、待处理问题和章节进度会一起保存为可恢复状态，刷新页面后仍能看到真实处理原因。
-- 整本自动创作会保留可用正文、记录局部质量问题并继续；质量优先可在人工分阶段创作时停在已保存边界等待确认。
-- 正文无法确认保存时不会自动重复生成；后台任务自动恢复失败时会保留恢复入口，并从未完成章节继续。
+#### 修复
+
+- 热门题材雷达生成过 AI 分析后，仍可重新勾选其他榜单作品并生成新的分析，无需重复扫榜；分析期间会显示本次进度，已有报告关联的收藏题材和创作简报继续保留。
+- 修复长篇小说自动导演在生成多卷战略时可能因结构化结果被截断而中断的问题；系统会按预计卷数提供足够的输出空间，并要求卷级策略保持精简完整，减少停在“缺少规划资源”的情况。
+- 修复通过自定义中转使用 Kimi K3 时，章节任务可能因温度参数不受模型支持而失败的问题；生成请求会按模型要求使用温度 `1`。
+- Windows 桌面版更新至 `0.4.28`，包含本次热门题材雷达与生成稳定性修复。
 
 完整历史更新见 [docs/releases/release-notes.md](./docs/releases/release-notes.md)。
 
